@@ -1,11 +1,13 @@
-import qiskit, os, pathlib
+import qiskit, os
 import numpy as np
 import copy
+import time
 from qiskit import QuantumCircuit
 from qiskit.circuit.library import *
 
 # This Python File is created by Tai Nguyen
 # Latest edit date: 4/21/2025
+# Intended for FRI Spring 2025
 
 # Globals (potentially used for searching specific states)
 max_shots = 32768 # Maximum shots for the simulator
@@ -70,11 +72,7 @@ def reset_globals():
 
 # Other stuff
 # Make a text display of results |More to do|
-
 # Implement measure operation:
-# sum amplitude squared where measured qubit is 1 or 0 (group the probabilities according to the qubit value)
-# choose between 1 or 0 based on probability, 0 out other amplitudes
-# zero out other amplitudes
 
 
 # For single qubit gates
@@ -628,3 +626,5 @@ def main():
 
 main()
 print("\nGoodbye!")
+time.sleep(1.5)
+
