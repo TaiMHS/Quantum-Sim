@@ -5,7 +5,7 @@ from qiskit import QuantumCircuit
 from qiskit.circuit.library import *
 
 # This Python File is created by Tai Nguyen
-# Latest edit date: 4/13/2025
+# Latest edit date: 4/21/2025
 
 # Globals (potentially used for searching specific states)
 max_shots = 32768 # Maximum shots for the simulator
@@ -13,6 +13,8 @@ quantum_circuit: QuantumCircuit = None
 statevector = None # Statevector of the circuit
 deci = None # Decimal places for rounding
 
+
+# Used for measurement operations
 measure_op_found: bool = False # Used to check if measure operation is found in the file
 r_measure = [] # Measured states for randomization, serves as all visualization seeds
 blank = []
@@ -30,6 +32,34 @@ for i in range(random_states): # Creates blank states to store measurement opera
 altered_vector_state = [] # Used to store the altered statevector for measurement operations
 measure_sets = 0 # Counts grouped measurements before other gates are applied afterwards
 measure_last_op = False # Checks last operation if its a measurement operation
+
+def reset_globals():
+    global random_states
+    global blank
+
+    # Ones to reset
+    global statevector
+    global deci
+    global measure_last_op
+    global measure_op_found
+    global r_measure
+    global qc_tuplelist
+    global altered_vector_state
+    global measure_sets
+
+    statevector = None
+    deci = None
+    measure_last_op = False
+    measure_op_found = False
+    r_measure = []
+    qc_tuplelist = []
+    altered_vector_state = []
+    measure_sets = 0
+
+    for i in range(random_states):
+        r_measure.append(blank)
+
+
 
 
 # To-do
@@ -99,7 +129,7 @@ def qu_prob(tgt_index, vector):
 
     return res
 
-# Creates Measurement gate
+# Creates Measurement gate and applies it
 def perform_measure(tgt_index):
     global quantum_circuit
     global random_states
@@ -174,6 +204,22 @@ def create_gate_single(ins_name, qubit_tuple, tgt_index, params):
     return gate
 
 
+# Entanglement operations on 2 qubits
+def two_q_entanglement(ins_name, qubit_tuple, params, statevector):
+    global quantum_circuit
+
+    if ins_name in "cx cnot": # tuple[0] is the control qubit, tuple[1] is the target qubit
+        ctrl_index = quantum_circuit.qubits.index(qubit_tuple[0])
+        tgt_index = quantum_circuit.qubits.index(qubit_tuple[1])
+
+        for i in range(len(statevector)):
+            if ((i & (1 << ctrl_index)) != 0):
+                j = i ^ (1 << tgt_index) # Flipped bit result
+
+                if (i < j): # Prevent double flipping
+                    statevector[i], statevector[j] = statevector[j], statevector[i] # Didn't even know python can do this
+
+
 # Performs the instruction
 def perform(ins, qubit_tuple):
     #QC.data.instruction.qubits[i]
@@ -185,51 +231,28 @@ def perform(ins, qubit_tuple):
     #Gate creation
     gate = None
 
-    if not (ins.operation.name in "id iden x y z h s sdg t tdg p u u1 u2 u3 cx cnot"):
-        return None
-    
-
     if (len(qubit_tuple) == 1):
         gate = create_gate_single(ins.operation.name, qubit_tuple, quantum_circuit.qubits.index(qubit_tuple[0]), ins.operation.params)
     elif (len(qubit_tuple) == 2):
-        #gate = create_gate_double()
+        gate = 1
         pass
 
     return gate
 
 # Grabs the QASM file as input from terminal
 def fileselect():
-    dir = None
+    file = None
 
-    while dir == None: # Grabs directory
+    while file == None: # Grabs File
         try:
-            dirname = input("\nDirectory of QASM file?\nType without spaces: ")
-            dir = os.listdir(dirname)
+            file = input("\nPath Address of QASM file?\nType without spaces: ")
         except FileNotFoundError:
             q_prompt = input("\n\nType \"Yes\" to exit: ")
             if q_prompt in "yes Yes":
                 return None
-            dir = None
-    
-    print("\n-------------------------------------")
-    for f in dir:
-        if f.endswith(".qasm"):
-            print(f + "\n") 
+            file = None
 
-    filename = None
-
-    while filename == None: # Grabs file name
-        filename = input("\nType a file name from above or \"Exit\" to exit: ")
-
-        if (filename in "Exit exit"):
-            return None
-
-        if not (".qasm" in filename) or not (filename in dir):
-            filename = None
-
-
-    
-    return os.path.join(dirname, filename)
+    return file
 
 def warning_statement():
     print("\nMade by Tai Nguyen for FRI Spring 2025\n")
@@ -238,7 +261,8 @@ def warning_statement():
     print("This simulator can handle multi-qubit systems.")
 
     print("\n2. Does not allow any application of gates after measurement.")
-    print("This simulator does not work with classical bits after measurement or classical bits in general.")
+    print("This simulator does not work with classical bits after measurement,")
+    print("only using them when doing shots.")
     input("\nPress Enter to continue")
     return
 
@@ -270,12 +294,6 @@ def calculations_pt1_1(statevector):
         return None
 
 
-    # Phase is arctan of (b / a) where b is the complex part and a is real
-    print("\nAmplitude for each state:\n-------------------------------------")
-    for i in range(two_power_q):
-        toprint = f"({i}) {i:0{quantum_circuit.num_qubits}b}: {np.round(statevector[i].real, decimals=int(deci))} + {np.round(statevector[i].imag, decimals=int(deci))}i"
-        print(toprint)
-
     # Factor calculations
     sq_sum = 0
     for i in range(two_power_q):
@@ -283,7 +301,15 @@ def calculations_pt1_1(statevector):
 
     normal_factor = np.round(np.sqrt(sq_sum), decimals=int(deci))
 
-    print(f"\nNormalization factor (denominator): {normal_factor}")
+
+    # Phase is arctan of (b / a) where b is the complex part and a is real
+    print("\nAmplitude for each state:\n-------------------------------------")
+    for i in range(two_power_q):
+        toprint = f"({i}) {i:0{quantum_circuit.num_qubits}b}: {np.round(statevector[i].real / normal_factor, decimals=int(deci))} + {np.round(statevector[i].imag / normal_factor, decimals=int(deci))}i"
+        print(toprint)
+
+    # If we wanted to know original amplitude and factor
+    #print(f"\nNormalization factor (denominator): {normal_factor}")
 
     display_phase = input("\nType \"Yes\" to display phases: ")
 
@@ -293,6 +319,14 @@ def calculations_pt1_1(statevector):
             phase = np.arctan2(statevector[i].imag, statevector[i].real)
             toprint = f"({i}) {i:0{quantum_circuit.num_qubits}b}: {np.round(phase / np.pi, decimals=int(deci))}π"
             print(toprint)
+
+# Allowed operations
+def allowed_operations(ins):
+    if (ins.operation.name in "id iden x y z h s sdg t tdg p u u1 u2 u3 cx cnot measure"):
+        return True
+    return False
+    
+
 
 # Does the calculations given by file, returns None if error, returns statevector otherwise
 # Performs calculation of: Amplitude, Normalization factor, Phases
@@ -317,8 +351,7 @@ def calculations_pt1():
             vis_num = input("Type \"Yes\" to exit: ")
             if (vis_num in "Yes yes"):
                 return None
-            
-            continue
+            vis_num = -1
 
     # Initialize gate
     gate = None
@@ -333,6 +366,10 @@ def calculations_pt1():
 
     # Performing each instruction
     for i in quantum_circuit.data:
+        if (not allowed_operations(i)):
+            print("Some operations not allowed in this simulator")
+            return None
+        
         if (i.operation.name != "barrier"):
             if (i.operation.name == "measure"): # Measurement operation case
                 measure_last_op = True
@@ -366,18 +403,27 @@ def calculations_pt1():
                     measure_sets += 1
                     measure_last_op = False
 
-                gate = perform(i, i.qubits)
-
-                if (gate is None):
-                    print("Operations found in file not available or other errors.\nGoodbye!")
-                    return None
                 
-                #print(f"{gate}\n")
-                if (measure_op_found):
-                    for i in range(random_states):
-                        r_measure[i] = np.dot(gate, r_measure[i])
+                if (i.operation.name == "cx" or i.operation.name == "cnot"): # CNOT operation // Set up for other entanglement operations
+                    if (measure_op_found):
+                        for i in range(random_states):
+                            two_q_entanglement(i.operation.name, i.qubits, i.operation.params, r_measure[i])
 
-                statevector = np.dot(gate, statevector)
+                    two_q_entanglement(i.operation.name, i.qubits, i.operation.params, statevector)
+
+                else: # Non-CNOT operation
+                    gate = perform(i, i.qubits)
+
+                    if (gate is None):
+                        print("Operations found in file not available or other errors.\nGoodbye!")
+                        return None
+                
+                    #print(f"{gate}\n")
+                    if (measure_op_found):
+                        for i in range(random_states):
+                            r_measure[i] = np.dot(gate, r_measure[i])
+
+                    statevector = np.dot(gate, statevector)
             
 
         #print(f"{i.operation.name}")
@@ -501,22 +547,22 @@ def calculations_pt2(): # Performing shots
             print(f"({i}) {i:0{quantum_circuit.num_qubits}b}: {shots_arr[i]}, %{np.round(shots_arr_prob[i] * 100, decimals=deci)}")
     
 
-    return None
+    return True
 
 
 def main():
     global quantum_circuit
     global statevector
     global qc_tuplelist
+    global r_measure
+    global altered_vector_state
     
     # Warning messages
-    # warning_statement()
+    warning_statement()
 
-    # file = fileselect()
-    # if (file == None): # For exiting
-    #     return
-    #file = 'C:\\' + 'Users\Tie\Downloads\G.qasm' # testing
-    file = 'C:\\' + 'Users\Tai Nguyen\Downloads\G.qasm' # testing
+    file = fileselect() # Grabs file from user
+    if (file == None): # For exiting
+        return
 
     # Grab Circuit and draw
     print("\nDrawing of circuit from file:\n-------------------------------------")
@@ -526,23 +572,59 @@ def main():
         print(quantum_circuit.draw(output='text'))
     except Exception:
         print("An error has occured, please retry")
+        return
 
+
+    retry = True # Meant for going through visualizations not recalculations
 
     statevector = calculations_pt1()
+
+
+
+    sv = statevector.copy()
+    rm = r_measure.copy()
+    av = altered_vector_state.copy()
+    bits = qc_tuplelist.copy()
+
+    # Repeating options
+    vis = True
+    sho = True
+
     if (statevector is None): # Error message done in calculations
-        return
+            return
     
+    while (retry == True):
+        
+        if (sho == True):
+            shot_option = input("\nType \"Yes\" to perform shots: ")
+            if (shot_option in "Yes yes"):
+                None_check = calculations_pt2()
+                if (None_check is None):
+                    return
+                
+            else:
+                sho = False
+            
+        if (vis == True):
+            if (input("\nType \"Yes\" for other visualizations: ") in "Yes yes"):
+                reset_globals()
+                statevector = sv
+                r_measure = rm
+                altered_vector_state = av
+                qc_tuplelist = bits
 
-    None_check = calculations_pt2()
-    if (None_check is None):
-        return
+                try:
+                    vis_num = int(input(f"\nEnter visualization seed [0 - {random_states - 1}]: "))
+                except Exception:
+                    return
+                
+                calculations_pt1_1(r_measure[vis_num])
+            else:
+                vis = False
 
+        if not (vis or sho):
+            retry = False
 
-    
-    
-
-
-    
 
 main()
 print("\nGoodbye!")
