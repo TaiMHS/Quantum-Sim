@@ -295,7 +295,10 @@ def calculations_pt1_1(statevector):
     # Factor calculations
     sq_sum = 0
     for i in range(two_power_q):
-        sq_sum += np.abs(statevector[i]) ** 2
+        try:
+            sq_sum += np.abs(statevector[i]) ** 2
+        except Exception:
+            print(statevector)
 
     normal_factor = np.round(np.sqrt(sq_sum), decimals=int(deci))
 
@@ -603,7 +606,7 @@ def main():
             else:
                 sho = False
             
-        if (vis == True):
+        if (vis == True and measure_op_found == True):
             if (input("\nType \"Yes\" for other visualizations: ") in "Yes yes"):
                 reset_globals()
                 statevector = sv
@@ -619,6 +622,9 @@ def main():
                 calculations_pt1_1(r_measure[vis_num])
             else:
                 vis = False
+        
+        if (measure_op_found == False):
+            vis = False
 
         if not (vis or sho):
             retry = False
